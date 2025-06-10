@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bebacoin</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    .spin-slow {
+      animation: spin 8s linear infinite;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
+
+</head>
+<body class="bg-blue-50 font-sans">
+  <div class="max-w-6xl mx-auto p-4">
+    <div class="absolute top-4 right-4">
+      <img src="beba.png" alt="bebacoin-logo" class="h-32 w-32 spin-slow opacity-80">>
+    </div>
+
+    <h1 class="text-3xl font-bold text-blue-900 mb-6 flex items-center space-x-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3" />
+      </svg>
+      <span>Bebacoin</span>
+    </h1>
+
+    <div class="grid md:grid-cols-2 gap-6">
+      <!-- Balance y dirección -->
+      <div class="bg-white shadow-md rounded-xl p-6">
+        <h2 class="text-xl font-semibold text-blue-700 mb-2">Balance</h2>
+        <p class="text-4xl font-bold text-blue-900" id="balance">0.0000 BBC</p>
+        <div class="mt-2 text-sm text-gray-600 space-y-1">
+          <p>Pendiente: <span id="pending">0.0000</span> BBC</p>
+          <p>No disponible: <span id="immature">0.0000</span> BBC</p>
+        </div>
+
+        <div class="mt-4">
+          <label class="block text-gray-700 text-sm font-medium mb-1">Tu dirección actual:</label>
+          <div class="flex items-center gap-2">
+            <input type="text" id="address" readonly class="w-full bg-gray-100 p-2 rounded-lg border text-sm">
+            <button onclick="loadAddress()" class="bg-gray-200 px-2 rounded hover:bg-gray-300">+</button>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">Comparte esta dirección para recibir Bebacoin</p>
+        </div>
+      </div>
+
+      <!-- Enviar -->
+      <div class="bg-white shadow-md rounded-xl p-6">
+        <h2 class="text-xl font-semibold text-green-700 mb-2">Enviar Bebacoin</h2>
+        <label class="block text-sm font-medium">Dirección de destino</label>
+        <input type="text" id="destino" class="w-full p-2 mb-2 border rounded" placeholder="Ingresa la dirección del destinatario">
+
+        <label class="block text-sm font-medium">Monto (BBC)</label>
+        <input type="number" id="monto" class="w-full p-2 mb-4 border rounded">
+
+        <button onclick="enviar()" class="bg-black text-white px-4 py-2 rounded w-full hover:bg-gray-800">Enviar Bebacoin</button>
+      </div>
+    </div>
+
+    <!-- Historial -->
+    <div class="bg-white shadow-md rounded-xl p-6 mt-6">
+      <h2 class="text-xl font-semibold text-purple-700 mb-4">Historial de Transacciones</h2>
+      <div id="historial" class="space-y-3">
+        <!-- Transacciones -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function loadBalance() {
+      const res = await fetch("/balance");
+      const data = await res.json();
+      document.getElementById("balance").textContent = `${parseFloat(data.available).toFixed(4)} BBC`;
+      document.getElementById("pending").textContent = parseFloat(data.pending).toFixed(4);
+      document.getElementById("immature").textContent = parseFloat(data.immature).toFixed(4);
+    }
+
+    async function loadAddress() {
+      const res = await fetch("/address");
+      const data = await res.json();
+      document.getElementById("address").value = data.address;
+    }
+
+    let mostrarTodas = false;
+
+    async function loadTransactions() {
+      const res = await fetch("/transactions");
+      const data = await res.json();
+      const cont = document.getElementById("historial");
+      cont.innerHTML = "";
+
+      const txs = mostrarTodas ? data.transactions : data.transactions.slice(0, 4);
+
+      txs.forEach(tx => {
+        const color = tx.category === "send" ? "text-red-600" : "text-green-600";
+        const estado = tx.confirmations > 0 ? "Completado" : "Pendiente";
+        const tipo = tx.category === "send" ? "Enviado" : "Recibido";
+        const direccion = tx.category === "send" ? `Para: ${tx.address}` : `De: ${tx.address}`;
+
+        cont.innerHTML += `
+          <div class="border p-3 rounded-md shadow-sm">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-sm font-medium bg-${tipo === "Enviado" ? "red" : "green"}-100 text-${tipo === "Enviado" ? "red" : "green"}-800 px-2 py-0.5 rounded">${tipo}</span>
+              <span class="text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-700">${estado}</span>
+            </div>
+            <p class="text-sm text-gray-700">${direccion}</p>
+            <p class="${color} font-semibold text-lg">${(tx.amount).toFixed(4)} BBC</p>
+            <p class="text-xs text-gray-500">${new Date(tx.time * 1000).toLocaleString()}</p>
+          </div>
+        `;
+      });
+
+      if (!mostrarTodas && data.transactions.length > 4) {
+        cont.innerHTML += `
+          <div class="text-center mt-4">
+            <button onclick="mostrarTodas = true; loadTransactions();" class="text-blue-600 underline hover:text-blue-800">Mostrar todas las transacciones</button>
+          </div>
+        `;
+      }
+    }
+
+
+    async function enviar() {
+      const address = document.getElementById("destino").value;
+      const amount = parseFloat(document.getElementById("monto").value);
+      if (!address || !amount || amount <= 0) {
+        alert("Datos inválidos");
+        return;
+      }
+      const res = await fetch("/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, amount, conf_target: 6, estimate_mode: "ECONOMICAL" })
+      });
+      const data = await res.json();
+      if (data.txid) {
+        alert("Transacción enviada! TXID: " + data.txid);
+        loadBalance();
+        loadTransactions();
+      } else {
+        alert("Error: " + JSON.stringify(data.error));
+      }
+    }
+
+    // Inicializar todo al cargar
+    loadBalance();
+    loadAddress();
+    loadTransactions();
+
+    setInterval(() => {
+      loadBalance();
+      loadTransactions();
+    }, 10000); // Cada 10 segundos
+
+  </script>
+</body>
+</html>
